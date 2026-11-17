@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-ipa:
@@ -128,4 +128,24 @@ jobs:
           name: Orbit-ipa-${{ github.run_number }}
           path: ${{ runner.temp }}/exported/*.ipa
           if-no-files-found: error
+
+      - name: Publish GitHub release
+        if: ${{ github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[release]') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          ipa_files=("$RUNNER_TEMP"/exported/*.ipa)
+          if [ "${#ipa_files[@]}" -ne 1 ]; then
+            echo "Expected exactly one IPA, found ${#ipa_files[@]}." >&2
+            exit 1
+          fi
+          tag="v0.1.${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" "${ipa_files[0]}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Orbit $tag" \
+            --generate-notes
 
