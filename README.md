@@ -2,7 +2,7 @@
 
 Orbit is a SwiftUI iOS sideloading client scaffold with two explicit signing lanes:
 
-- **Sideloading apps**: apps installed through a KSign-managed certificate or manifest endpoint.
+- **KSign apps**: apps installed through a KSign-managed certificate or manifest endpoint.
 - **Orbit refresh**: Orbit's own refresh path, backed by a personal-development profile.
 
 ## Important platform boundary
@@ -17,6 +17,21 @@ iOS does not provide a public API for a third-party app to silently sign and ins
 4. Add the `Orbit` capability only after you have a real backend/provider for the chosen installation handoff.
 
 The current build is intentionally safe-by-default: the demo provider returns an explanatory error until a real provider is configured.
+
+## Build a signed IPA with GitHub Actions
+
+The repository includes `.github/workflows/build-ipa.yml`. It runs on a macOS GitHub-hosted runner, archives Orbit, exports a signed IPA, and uploads it as a workflow artifact.
+
+Add these Actions secrets before running the workflow manually:
+
+- `APPLE_CERTIFICATE_BASE64`: base64-encoded `.p12` certificate.
+- `P12_PASSWORD`: password for the `.p12` file.
+- `PROVISIONING_PROFILE_BASE64`: base64-encoded provisioning profile for `com.orbit.app`.
+- `KEYCHAIN_PASSWORD`: temporary CI keychain password.
+- `TEAM_ID`: Apple Developer team ID.
+- `EXPORT_METHOD`: usually `development` for a personal development profile or `ad-hoc` for an Ad Hoc distribution profile.
+
+The workflow signs Orbit itself with the personal certificate. It does not embed KSign private keys in CI; KSign remains the installation lane for other apps.
 
 ## Provider integration points
 
