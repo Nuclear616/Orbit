@@ -1,0 +1,131 @@
+name: Build Orbit IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-ipa:
+    runs-on: macos-14
+    env:
+      APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+      P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+      PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+      KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+      TEAM_ID: ${{ secrets.TEAM_ID }}
+      EXPORT_METHOD: ${{ secrets.EXPORT_METHOD }}
+
+    steps:
+      - name: Check out Orbit
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: xcodebuild -version
+
+      - name: Validate signing configuration
+        shell: bash
+        run: |
+          missing=()
+          for name in APPLE_CERTIFICATE_BASE64 P12_PASSWORD PROVISIONING_PROFILE_BASE64 KEYCHAIN_PASSWORD TEAM_ID EXPORT_METHOD; do
+            if [ -z "${!name}" ]; then
+              missing+=("$name")
+            fi
+          done
+          if [ "${#missing[@]}" -ne 0 ]; then
+            echo "Missing GitHub Actions secrets: ${missing[*]}" >&2
+            exit 1
+          fi
+
+      - name: Install signing certificate and profile
+        id: signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          CERT_PATH="$RUNNER_TEMP/orbit-signing.p12"
+          PROFILE_PATH="$RUNNER_TEMP/orbit.mobileprovision"
+          KEYCHAIN_PATH="$RUNNER_TEMP/orbit-build.keychain-db"
+
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 -D > "$CERT_PATH"
+          echo "$PROVISIONING_PROFILE_BASE64" | base64 -D > "$PROFILE_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security default-keychain -s "$KEYCHAIN_PATH"
+
+          PROFILE_NAME=$(security cms -D -i "$PROFILE_PATH" | plutil -extract Name raw -o - -)
+          PROFILE_UUID=$(security cms -D -i "$PROFILE_PATH" | plutil -extract UUID raw -o - -)
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+
+          CODE_SIGN_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | sed -n 's/.*"\(.*\)"/\1/p' | head -1)
+          if [ -z "$CODE_SIGN_IDENTITY" ]; then
+            echo "No code-signing identity was found in the imported certificate." >&2
+            exit 1
+          fi
+
+          {
+            echo "profile_name=$PROFILE_NAME"
+            echo "profile_uuid=$PROFILE_UUID"
+            echo "code_sign_identity=$CODE_SIGN_IDENTITY"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Archive Orbit
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project Orbit.xcodeproj \
+            -scheme Orbit \
+            -sdk iphoneos \
+            -configuration Release \
+            -archivePath "$RUNNER_TEMP/Orbit.xcarchive" \
+            archive \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="${{ steps.signing.outputs.code_sign_identity }}" \
+            PROVISIONING_PROFILE_SPECIFIER="${{ steps.signing.outputs.profile_name }}"
+
+      - name: Export IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>${EXPORT_METHOD}</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>teamID</key>
+            <string>${TEAM_ID}</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>com.orbit.app</key>
+              <string>${{ steps.signing.outputs.profile_name }}</string>
+            </dict>
+          </dict>
+          </plist>
+          PLIST
+
+          mkdir -p "$RUNNER_TEMP/exported"
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Orbit.xcarchive" \
+            -exportPath "$RUNNER_TEMP/exported" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Orbit-ipa-${{ github.run_number }}
+          path: ${{ runner.temp }}/exported/*.ipa
+          if-no-files-found: error
+
