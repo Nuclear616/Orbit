@@ -2,9 +2,9 @@
   "images" : [
     {
       "filename" : "OrbitIcon-1024.png",
-      "idiom" : "ios-marketing",
-      "size" : "1024x1024",
-      "scale" : "1x"
+      "idiom" : "universal",
+      "platform" : "ios",
+      "size" : "1024x1024"
     }
   ],
   "info" : {
@@ -12,4 +12,3 @@
     "version" : 1
   }
 }
-
