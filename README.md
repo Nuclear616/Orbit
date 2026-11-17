@@ -18,20 +18,13 @@ iOS does not provide a public API for a third-party app to silently sign and ins
 
 The current build is intentionally safe-by-default: the demo provider returns an explanatory error until a real provider is configured.
 
-## Build a signed IPA with GitHub Actions
+## Build an unsigned IPA with GitHub Actions
 
-The repository includes `.github/workflows/build-ipa.yml`. It runs on a macOS GitHub-hosted runner, archives Orbit, exports a signed IPA, and uploads it as a workflow artifact.
+The repository includes `.github/workflows/build-ipa.yml`. It runs on a macOS GitHub-hosted runner, archives Orbit without Apple signing, packages an unsigned IPA, uploads it as a workflow artifact, and publishes it to a GitHub release for release-marked pushes.
 
-Add these Actions secrets before running the workflow manually:
+No Apple signing secrets are required for this workflow. The resulting IPA is not installable on a physical iPhone until it is signed with a valid certificate and provisioning profile.
 
-- `APPLE_CERTIFICATE_BASE64`: base64-encoded `.p12` certificate.
-- `P12_PASSWORD`: password for the `.p12` file.
-- `PROVISIONING_PROFILE_BASE64`: base64-encoded provisioning profile for `com.orbit.app`.
-- `KEYCHAIN_PASSWORD`: temporary CI keychain password.
-- `TEAM_ID`: Apple Developer team ID.
-- `EXPORT_METHOD`: usually `development` for a personal development profile or `ad-hoc` for an Ad Hoc distribution profile.
-
-The workflow signs Orbit itself with the personal certificate. It does not embed KSign private keys in CI; KSign remains the installation lane for other apps.
+The workflow does not embed KSign private keys; KSign remains the installation lane for other apps.
 
 ## Provider integration points
 
