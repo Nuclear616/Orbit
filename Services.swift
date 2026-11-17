@@ -6,6 +6,7 @@ enum OrbitError: LocalizedError {
     case expiredCertificate(String)
     case unsupportedInstallationFlow
     case providerNotConfigured
+    case missingPKCS12
     case invalidManifestURL
 
     var errorDescription: String? {
@@ -18,6 +19,8 @@ enum OrbitError: LocalizedError {
             return "iOS requires a supported installation handoff; Orbit cannot silently install an IPA from inside the app."
         case .providerNotConfigured:
             return "This provider is not configured for the current build."
+        case .missingPKCS12:
+            return "Import a .p12 certificate before sideloading apps."
         case .invalidManifestURL:
             return "The installation manifest URL is invalid or not trusted."
         }
@@ -37,6 +40,9 @@ struct KSignManifestProvider: InstallationProvider {
     func install(app: OrbitAppRecord, using certificate: CertificateProfile) async throws {
         guard certificate.lane == .ksign else {
             throw OrbitError.providerNotConfigured
+        }
+        guard certificate.keychainReference != nil, certificate.kind == "PKCS#12 identity" else {
+            throw OrbitError.missingPKCS12
         }
         guard !certificate.isExpired else {
             throw OrbitError.expiredCertificate(certificate.label)
