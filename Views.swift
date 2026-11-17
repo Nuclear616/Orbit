@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct RootView: View {
     @EnvironmentObject private var store: OrbitStore
@@ -13,6 +14,8 @@ struct RootView: View {
                 .tabItem { Label("Certificates", systemImage: "checkmark.shield.fill") }
             ActivityView()
                 .tabItem { Label("Activity", systemImage: "clock.arrow.circlepath") }
+            AccountView()
+                .tabItem { Label("Account", systemImage: "person.crop.circle") }
         }
         .tint(.indigo)
         .alert("Orbit", isPresented: Binding(
@@ -64,11 +67,18 @@ struct DashboardView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Your app orbit")
-                .font(.largeTitle.bold())
-            Text("One place for your certificate-backed installs and Orbit refreshes.")
-                .foregroundStyle(.secondary)
+        HStack(alignment: .center, spacing: 14) {
+            Image("OrbitIcon")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 64, height: 64)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Your app orbit")
+                    .font(.largeTitle.bold())
+                Text("One place for your certificate-backed installs and Orbit refreshes.")
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -95,6 +105,7 @@ struct DashboardView: View {
 
 struct LibraryView: View {
     @EnvironmentObject private var store: OrbitStore
+    @State private var showingIPAImporter = false
 
     var body: some View {
         NavigationStack {
@@ -115,6 +126,31 @@ struct LibraryView: View {
                 }
             }
             .navigationTitle("Library")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        showingIPAImporter = true
+                    } label: {
+                        Label("Import IPA", systemImage: "square.and.arrow.down")
+                    }
+                }
+            }
+            .fileImporter(
+                isPresented: $showingIPAImporter,
+                allowedContentTypes: [.data],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let url):
+                    guard url.pathExtension.lowercased() == "ipa" else {
+                        store.report("Choose an .ipa file.")
+                        return
+                    }
+                    store.importIPA(from: url)
+                case .failure(let error):
+                    store.report(error.localizedDescription)
+                }
+            }
         }
     }
 
@@ -143,6 +179,11 @@ struct LibraryView: View {
 
 struct CertificatesView: View {
     @EnvironmentObject private var store: OrbitStore
+    @State private var showingP12Importer = false
+    @State private var showingProfileImporter = false
+    @State private var showingPasswordSheet = false
+    @State private var selectedP12URL: URL?
+    @State private var importLane: CertificateLane = .ksign
 
     var body: some View {
         NavigationStack {
@@ -157,10 +198,10 @@ struct CertificatesView: View {
                                     Image(systemName: certificate.isExpired ? "exclamationmark.triangle.fill" : "checkmark.seal.fill")
                                         .foregroundStyle(certificate.isExpired ? .orange : .green)
                                 }
-                                Text(certificate.isExpired ? "Expired" : "Expires \(certificate.expiresAt.formatted(date: .abbreviated, time: .omitted))")
+                                Text(certificate.isExpired ? "Expired" : certificate.expiresAt.map { "Expires \($0.formatted(date: .abbreviated, time: .omitted))" } ?? "Expiration not available")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
-                                Text("Team \(certificate.teamIdentifier) · \(certificate.bundleIdentifier)")
+                                Text("\(certificate.kind) · Team \(certificate.teamIdentifier) · \(certificate.bundleIdentifier)")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -170,6 +211,138 @@ struct CertificatesView: View {
                 }
             }
             .navigationTitle("Certificates")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Menu {
+                        Button("Import .p12 identity") {
+                            importLane = .ksign
+                            showingP12Importer = true
+                        }
+                        Button("Import provisioning profile") {
+                            importLane = .ksign
+                            showingProfileImporter = true
+                        }
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                }
+            }
+            .fileImporter(isPresented: $showingP12Importer, allowedContentTypes: [.data], allowsMultipleSelection: false) { result in
+                switch result {
+                case .success(let url):
+                    guard url.pathExtension.lowercased() == "p12" else {
+                        store.report("Choose a .p12 certificate file.")
+                        return
+                    }
+                    selectedP12URL = url
+                    showingPasswordSheet = true
+                case .failure(let error):
+                    store.report(error.localizedDescription)
+                }
+            }
+            .fileImporter(isPresented: $showingProfileImporter, allowedContentTypes: [.data], allowsMultipleSelection: false) { result in
+                switch result {
+                case .success(let url):
+                    guard ["mobileprovision", "provisionprofile"].contains(url.pathExtension.lowercased()) else {
+                        store.report("Choose a .mobileprovision file.")
+                        return
+                    }
+                    store.importProvisioningProfile(from: url, lane: importLane)
+                case .failure(let error):
+                    store.report(error.localizedDescription)
+                }
+            }
+            .sheet(isPresented: $showingPasswordSheet) {
+                CertificatePasswordSheet(lane: $importLane) { password in
+                    if let selectedP12URL {
+                        store.importPKCS12(from: selectedP12URL, password: password, lane: importLane)
+                    }
+                    selectedP12URL = nil
+                    showingPasswordSheet = false
+                }
+            }
+        }
+    }
+}
+
+private struct CertificatePasswordSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var lane: CertificateLane
+    @State private var password = ""
+    let onImport: (String) -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Certificate") {
+                    Picker("Lane", selection: $lane) {
+                        ForEach(CertificateLane.allCases) { lane in
+                            Text(lane.title).tag(lane)
+                        }
+                    }
+                    SecureField(".p12 password", text: $password)
+                }
+                Section {
+                    Text("Orbit stores the imported identity in the device Keychain. It never saves the password in app preferences.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("Import identity")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Import") { onImport(password) }
+                        .disabled(password.isEmpty)
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+}
+
+struct AccountView: View {
+    @EnvironmentObject private var store: OrbitStore
+    @State private var displayName = ""
+    @State private var email = ""
+    @State private var teamIdentifier = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Developer account") {
+                    TextField("Display name", text: $displayName)
+                    TextField("Apple Developer email", text: $email)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.emailAddress)
+                    TextField("Team ID", text: $teamIdentifier)
+                        .textInputAutocapitalization(.characters)
+                    Button("Save account profile") {
+                        store.saveDeveloperAccount(displayName: displayName, email: email, teamIdentifier: teamIdentifier)
+                    }
+                }
+                if let account = store.account {
+                    Section("Saved profile") {
+                        LabeledContent("Email", value: account.email)
+                        LabeledContent("Team ID", value: account.teamIdentifier)
+                        LabeledContent("Saved", value: account.connectedAt.formatted(date: .abbreviated, time: .omitted))
+                    }
+                }
+                Section {
+                    Link("Open Apple Developer account", destination: URL(string: "https://developer.apple.com/account/")!)
+                    Text("Orbit stores account metadata only. Apple ID passwords and verification codes are never collected. Certificate and profile files are stored in the Keychain after you import them from Files.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("Account")
+            .onAppear {
+                displayName = store.account?.displayName ?? ""
+                email = store.account?.email ?? ""
+                teamIdentifier = store.account?.teamIdentifier ?? ""
+            }
         }
     }
 }
