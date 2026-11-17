@@ -2,6 +2,12 @@ name: Build Orbit IPA
 
 on:
   workflow_dispatch:
+    inputs:
+      use_apple_placeholder_icon:
+        description: 'Use a temporary Apple-logo placeholder and bypass broken icon assets'
+        required: false
+        type: boolean
+        default: false
   push:
     branches: [main]
 
@@ -15,6 +21,38 @@ jobs:
     steps:
       - name: Check out Orbit
         uses: actions/checkout@v4
+
+      - name: Use Apple placeholder icon (optional)
+        if: ${{ inputs.use_apple_placeholder_icon }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          swift - <<'SWIFT'
+          import AppKit
+          import Foundation
+
+          let size = 1024
+          let image = NSImage(size: NSSize(width: size, height: size))
+          image.lockFocus()
+          NSColor(calibratedRed: 0.12, green: 0.28, blue: 0.55, alpha: 1).setFill()
+          NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: size, height: size), xRadius: 190, yRadius: 190).fill()
+          if let symbol = NSImage(systemSymbolName: "apple.logo", accessibilityDescription: "Apple placeholder") {
+            let config = NSImage.SymbolConfiguration(pointSize: 560, weight: .regular)
+            let mark = symbol.withSymbolConfiguration(config)!
+            mark.isTemplate = true
+            NSColor.white.set()
+            let rect = NSRect(x: 232, y: 232, width: 560, height: 560)
+            mark.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1)
+          }
+          image.unlockFocus()
+          guard let tiff = image.tiffRepresentation,
+                let bitmap = NSBitmapImageRep(data: tiff),
+                let png = bitmap.representation(using: .png, properties: [:]) else {
+            fatalError("Could not render Apple placeholder icon")
+          }
+          try png.write(to: URL(fileURLWithPath: "Assets.xcassets/AppIcon.appiconset/OrbitIcon-1024.png"))
+          try png.write(to: URL(fileURLWithPath: "Assets.xcassets/OrbitIcon.imageset/OrbitIcon.png"))
+          SWIFT
 
       - name: Show toolchain
         run: xcodebuild -version
