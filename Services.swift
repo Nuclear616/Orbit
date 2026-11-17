@@ -78,16 +78,4 @@ struct PersonalDevelopmentProvider: SigningProvider {
     }
 }
 
-/// Stores references, not certificate bytes. Replace the placeholder methods with Keychain code.
-final class CertificateVault {
-    static let shared = CertificateVault()
-
-    private init() {}
-
-    func storeKeychainReference(_ reference: String, for profileID: UUID) throws {
-        // TODO: Store the reference in Keychain with kSecAttrAccessibleAfterFirstUnlock.
-        _ = reference
-        _ = profileID
-    }
-}
 
