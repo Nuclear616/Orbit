@@ -12,7 +12,7 @@ iOS does not provide a public API for a third-party app to silently sign and ins
 ## Open in Xcode
 
 1. Create a new **iOS App** project named `Orbit` using SwiftUI.
-2. Set the deployment target to iOS 17 or later.
+2. Set the deployment target to iOS 16 or later.
 3. Replace the generated Swift files with the contents of this folder, preserving the folder structure.
 4. Add the `Orbit` capability only after you have a real backend/provider for the chosen installation handoff.
 
