@@ -2,7 +2,7 @@
 
 Orbit is a SwiftUI iOS sideloading client scaffold with two explicit signing lanes:
 
-- **KSign apps**: apps installed through a KSign-managed certificate or manifest endpoint.
+- **Sideloading apps**: apps installed through a KSign-managed certificate or manifest endpoint.
 - **Orbit refresh**: Orbit's own refresh path, backed by a personal-development profile.
 
 ## Important platform boundary
