@@ -101,7 +101,7 @@ struct LibraryView: View {
             List {
                 Section("Installed") {
                     if store.installedApps.isEmpty {
-                        ContentUnavailableView("No installed apps", systemImage: "square.stack.3d.up", description: Text("Apps you install through Orbit will appear here."))
+                        OrbitEmptyState(title: "No installed apps", systemImage: "square.stack.3d.up", message: "Apps you install through Orbit will appear here.")
                     } else {
                         ForEach(store.installedApps) { app in
                             appRow(app)
@@ -181,7 +181,7 @@ struct ActivityView: View {
         NavigationStack {
             List {
                 if store.activity.isEmpty {
-                    ContentUnavailableView("No activity yet", systemImage: "clock.arrow.circlepath", description: Text("Install and refresh events will appear here."))
+                    OrbitEmptyState(title: "No activity yet", systemImage: "clock.arrow.circlepath", message: "Install and refresh events will appear here.")
                 } else {
                     ForEach(store.activity) { item in
                         HStack(alignment: .top, spacing: 12) {
@@ -201,6 +201,28 @@ struct ActivityView: View {
             }
             .navigationTitle("Activity")
         }
+    }
+}
+
+private struct OrbitEmptyState: View {
+    let title: String
+    let systemImage: String
+    let message: String
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.system(size: 32))
+                .foregroundStyle(.secondary)
+            Text(title)
+                .font(.headline)
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
     }
 }
 
