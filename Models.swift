@@ -39,6 +39,7 @@ struct OrbitAppRecord: Codable, Identifiable, Hashable {
     var state: AppInstallState
     var lastInstalledAt: Date?
     var sourceLabel: String
+    var localIPAPath: String?
 
     static let examples: [OrbitAppRecord] = [
         OrbitAppRecord(
@@ -51,7 +52,8 @@ struct OrbitAppRecord: Codable, Identifiable, Hashable {
             lane: .ksign,
             state: .ready,
             lastInstalledAt: nil,
-            sourceLabel: "KSign catalog"
+            sourceLabel: "KSign catalog",
+            localIPAPath: nil
         ),
         OrbitAppRecord(
             id: UUID(),
@@ -63,7 +65,8 @@ struct OrbitAppRecord: Codable, Identifiable, Hashable {
             lane: .personalDevelopment,
             state: .installed,
             lastInstalledAt: Date(),
-            sourceLabel: "Personal development"
+            sourceLabel: "Personal development",
+            localIPAPath: nil
         )
     ]
 }
@@ -73,12 +76,14 @@ struct CertificateProfile: Codable, Identifiable, Hashable {
     var label: String
     var teamIdentifier: String
     var bundleIdentifier: String
-    var expiresAt: Date
+    var expiresAt: Date?
     var lane: CertificateLane
     var keychainReference: String?
+    var kind: String
+    var sourceFileName: String?
     var isEnabled: Bool
 
-    var isExpired: Bool { expiresAt <= Date() }
+    var isExpired: Bool { expiresAt.map { $0 <= Date() } ?? false }
 
     static let examples: [CertificateProfile] = [
         CertificateProfile(
@@ -89,6 +94,8 @@ struct CertificateProfile: Codable, Identifiable, Hashable {
             expiresAt: Calendar.current.date(byAdding: .day, value: 21, to: Date()) ?? Date(),
             lane: .ksign,
             keychainReference: nil,
+            kind: "KSign-managed",
+            sourceFileName: nil,
             isEnabled: true
         ),
         CertificateProfile(
@@ -99,9 +106,20 @@ struct CertificateProfile: Codable, Identifiable, Hashable {
             expiresAt: Calendar.current.date(byAdding: .day, value: 6, to: Date()) ?? Date(),
             lane: .personalDevelopment,
             keychainReference: nil,
+            kind: "Personal development",
+            sourceFileName: nil,
             isEnabled: true
         )
     ]
+}
+
+struct DeveloperAccount: Codable, Identifiable, Hashable {
+    let id: UUID
+    var displayName: String
+    var email: String
+    var teamIdentifier: String
+    var keychainReference: String?
+    var connectedAt: Date
 }
 
 struct ActivityItem: Identifiable, Codable, Hashable {
